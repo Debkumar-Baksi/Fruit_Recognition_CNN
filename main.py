@@ -1,60 +1,61 @@
-from fruit_classifier_knn import run_knn
-from fruit_classifier_svm import run_svm
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 
-import tkinter as tk
-import matplotlib.pyplot as plt
-import matplotlib
+# Paths to training and testing directories
+train_dir = 'FruitsDB'
+test_dir = 'FruitsDB'
 
-from random import seed
-from random import randint
+# Image data generator for augmentation and normalization
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    validation_split=0.2
+)
 
-def showImg(img, name, method, i):
-    plt.subplot(2, 1, i)
-    plt.imshow(img)
-    plt.title(method + ": Result: " + name)
-    plt.axis("off")
+test_datagen = ImageDataGenerator(rescale=1./255, validation_split=0.2)
 
-def try_predictors(data_knn, y_knn_pred, svm, data, data_test, classes, k):
-    x_ = randint(0, data_knn.shape[0])
-    showImg(data_knn[x_], y_knn_pred[x_], "K Nearest Neighbors (k = {})".format(k), 1)
+# Load images from directories
+train_set = train_datagen.flow_from_directory(
+    train_dir,
+    target_size=(128, 128),
+    batch_size=32,
+    class_mode='categorical',
+    subset='training'
+)
+
+val_set = test_datagen.flow_from_directory(
+    test_dir,
+    target_size=(128, 128),
+    batch_size=32,
+    class_mode='categorical',
+    subset='validation'
+)
+
+# CNN model architecture
+model = Sequential([
+    Conv2D(32, (3, 3), activation='relu', input_shape=(128, 128, 3)),
+    MaxPooling2D(pool_size=(2, 2)),
     
-    x_ = randint(0, data_test.shape[0])
-    img = data[x_]
-    result = int(svm.predict(data_test[x_].reshape(1,192))[1][0][0])
-    result = classes[result]
-    showImg(img, result, "Support Vector Machine" , 2)
+    Conv2D(64, (3, 3), activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+    
+    Flatten(),
+    Dense(128, activation='relu'),
+    Dropout(0.5),
+    Dense(train_set.num_classes, activation='softmax')
+])
 
-    plt.show()
+# Compile the model
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-def gui(results_knn_no, results_svm_no, results_knn_yes, results_svm_yes, classes, k):
-    root = tk.Tk()
-    root.geometry("400x300")
-    root.title("Fruit Classifier")
+# Train the model
+model.fit(train_set, validation_data=val_set, epochs=15)
 
-    l1 = tk.Label(root, text="Precission of KNN with no Preprocessing: {0:.2f}%".format(results_knn_no[0]))
-    l1.pack()
-    l2 = tk.Label(root, text="Precission of SVM with no Preprocessing: {0:.2f}%".format(results_svm_no[0]))
-    l2.pack()
-    button1 = tk.Button(root, text='Try Classifier - No Prepocessing',
-                        command=lambda: try_predictors(results_knn_no[1], results_knn_no[2], results_svm_no[3], results_svm_no[1], results_svm_no[2], classes, k))
-    button1.pack()
+# Save the trained model
+model.save('fruit_recognition_model.h5')
 
-    l3 = tk.Label(root, text="Precission of KNN with Prepocessing - thresholding: {0:.2f}%".format(results_knn_yes[0]))
-    l3.pack()
-    l4 = tk.Label(root, text="Precission of SVM with Prepocessing - thresholding: {0:.2f}%".format(results_svm_yes[0]))
-    l4.pack()
-    button2 = tk.Button(root, text='Try Classifier - Prepocessing: thresholding',
-                        command=lambda: try_predictors(results_knn_yes[1], results_knn_yes[2], results_svm_yes[3], results_svm_yes[1], results_svm_yes[2], classes, k))
-    button2.pack()
-
-    root.mainloop()
-
-if __name__ == '__main__':
-    k = 11
-    results_knn_no = run_knn(k, False)
-    results_svm_no, classes = run_svm(False)
-
-    results_knn_yes = run_knn(k, True)
-    results_svm_yes, classes = run_svm(True)
-
-    gui(results_knn_no, results_svm_no, results_knn_yes, results_svm_yes, classes, k)
+print("✅ Model training complete and saved as 'fruit_recognition_model.h5'")
